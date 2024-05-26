@@ -1,16 +1,14 @@
-import 'package:csv/csv.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/intl.dart';
-import 'package:untitled1/widgets/progress_bar.dart';
+import 'package:untitled1/screens/login_screen.dart';
 import 'package:untitled1/widgets/search.dart';
 import 'firebase_options.dart';
-import 'package:http/http.dart' as http;
-import 'package:go_router/go_router.dart';
-import 'screens/login_screen.dart';
+import 'services/realtime_service.dart';
+import 'package:intl/intl.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,30 +19,22 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  MyApp({Key? key}) : super(key: key);
-
-  // 로그인 상태를 인덱스로 관리하는 ValueNotifier 생성
   final ValueNotifier<int> _authIndexNotifier = ValueNotifier(0);
 
   @override
   Widget build(BuildContext context) {
-    // FirebaseAuth 상태 변화를 감지하는 StreamBuilder
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // 로그인 상태에 따라 인덱스를 갱신
         _authIndexNotifier.value = snapshot.hasData ? 1 : 0;
-
-        // ValueListenableBuilder를 사용하여 _authIndexNotifier 변화 감지
         return ValueListenableBuilder<int>(
           valueListenable: _authIndexNotifier,
           builder: (context, authIndex, child) {
-            // GoRouter를 리턴하는 MaterialApp
             return MaterialApp.router(
               routeInformationProvider: _router.routeInformationProvider,
               routeInformationParser: _router.routeInformationParser,
               routerDelegate: _router.routerDelegate,
-              title: 'Firebase Storage Example',
+              title: 'My Refrigerator',
             );
           },
         );
@@ -53,7 +43,7 @@ class MyApp extends StatelessWidget {
   }
 
   GoRouter get _router => GoRouter(
-    refreshListenable: _authIndexNotifier, // 인덱스 변화를 리스닝
+    refreshListenable: _authIndexNotifier,
     routes: <GoRoute>[
       GoRoute(
         path: '/login',
@@ -65,7 +55,6 @@ class MyApp extends StatelessWidget {
       ),
     ],
     redirect: (BuildContext context, GoRouterState state) {
-      // 인덱스에 따라 리디렉션 로직을 처리
       if (_authIndexNotifier.value == 0 && state.uri.path != '/login') {
         return '/login';
       }
@@ -77,171 +66,111 @@ class MyApp extends StatelessWidget {
   );
 }
 
-
 class StorageDemoPage extends StatefulWidget {
   @override
   _StorageDemoPageState createState() => _StorageDemoPageState();
 }
 
 class _StorageDemoPageState extends State<StorageDemoPage> {
-  List<List<dynamic>> _data = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadExcelFile();
-  }
-
-  Future<void> _signOut() async {
-    await FirebaseAuth.instance.signOut();
-    await GoogleSignIn().signOut();
-  }
-
-  Future<void> _loadExcelFile() async {
-    try {
-      final ref = FirebaseStorage.instance.ref().child('qr_codes.csv');
-      final url = await ref.getDownloadURL();
-      final response = await http.get(Uri.parse(url));
-
-      if (response.statusCode == 200) {
-        final body = response.body;
-        List<List<dynamic>> csvTable = CsvToListConverter().convert(body);
-        setState(() {
-          _data = csvTable.sublist(1).map((row) => row.sublist(1)).toList();
-        });
-      } else {
-        setState(() {
-          _data = [
-            ['Error loading file: ${response.statusCode}']
-          ];
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _data = [
-          ['Error loading file: $e']
-        ];
-      });
-    }
-  }
-
-  String _calculateExpiryPeriod(String expiryDate) {
-    final dateFormat = DateFormat('yyyy.MM.dd');
-    DateTime endDate;
-    try {
-      endDate = dateFormat.parse(expiryDate);
-    } on FormatException {
-      return '(yyyy.MM.dd) 형태로 입력해주세요.';
-    }
-
-    final now = DateTime.now();
-    final remainingDays = endDate
-        .difference(now)
-        .inDays;
-
-    if (remainingDays < 0) {
-      return '유통기한이 지났습니다.(${-remainingDays}일 지남)';
-    } else if (remainingDays == 0) {
-      return 'D-Day';
-    } else {
-      return 'D-${-remainingDays}일';
-    }
-  }
-
-  int _calculateRemainingDays(String expiryDate) {
-    final dateFormat = DateFormat('yyyy.MM.dd');
-    try {
-      final endDate = dateFormat.parse(expiryDate);
-      final now = DateTime.now();
-      return endDate
-          .difference(now)
-          .inDays;
-    } on FormatException {
-      // 날짜 형식이 잘못되었을 경우 -1을 반환하거나 적절한 예외 처리를 합니다.
-      return -1;
-    }
-  }
-
-  double _calculateProgress(int daysDifference) {
-    if (daysDifference < 0) {
-      return 1.0; // 유통기한이 지난 경우, 프로그레스 바를 최대로 표시
-    }
-    // 유통기한까지 남은 일수에 따라 프로그레스 바 값 계산 로직을 추가합니다.
-    // 예: 유통기한까지 100일 남았다면, 1 - (100 / 설정한 기간)으로 계산할 수 있습니다.
-    return 1 - daysDifference / 365; // 예시로 365일을 기준으로 계산
-  }
+  final FirebaseService firebaseService = FirebaseService();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'My Refrigerator',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: Text('My Refrigerator'),
         actions: <Widget>[
           IconButton(
             icon: Icon(Icons.search),
-            onPressed: () {
-              // 검색 기능을 실행합니다.
-              showSearch(context: context, delegate: DataSearch(_data));
-            },
+            onPressed: () => showSearch(context: context, delegate: DataSearch([])),
           ),
           IconButton(
             icon: Icon(Icons.exit_to_app),
             onPressed: () async {
-              await _signOut();
-              // 로그아웃 후 로그인 화면으로 돌아갑니다.
+              await FirebaseAuth.instance.signOut();
+              await GoogleSignIn().signOut();
               Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => LoginScreen()));
+                  MaterialPageRoute(builder: (context) => LoginScreen())
+              );
             },
           ),
         ],
       ),
-      body: _data.isNotEmpty
-          ? ListView.builder(
-        itemCount: _data.length,
-        itemBuilder: (context, index) {
-          final itemData = _data[index][0].split('/');
-          if (itemData.length < 2) {
-            return ListTile(
-              title: Text('Incomplete data'),
-              subtitle: Text('No sufficient info available'),
-            );
+      body: StreamBuilder<List<OCRResult>>(
+        stream: firebaseService.getOCRResults(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return CircularProgressIndicator();
           }
-          final String foodName = itemData[0].trim();
-          final String expiryDate = itemData[1].trim();
-          final String remainingDays = _calculateExpiryPeriod(expiryDate);
-          final int days = int.tryParse(
-              remainingDays.split('일')[0].replaceAll('D-', '')) ??
-              0;
-          final double sliderValue =
-          days > 0 ? (100.0 - days) / 100.0 : 0.0;
+          if (snapshot.hasError) {
+            return Text('오류 발생: ${snapshot.error}');
+          }
+          if (snapshot.data == null || snapshot.data!.isEmpty) {
+            return Text('표시할 아이템이 없습니다.');
+          }
+          return ListView.builder(
+            itemCount: snapshot.data!.length,
+            itemBuilder: (context, index) {
+              final result = snapshot.data![index];
+              final expiryDate = findExpiryDate(result.texts);
+              final daysRemaining = _calculateRemainingDays(expiryDate);
+              final progress = _calculateProgress(daysRemaining);
 
-          return Column(
-            children: <Widget>[
-              ListTile(
-                title: Text(foodName,
-                    style: TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-              ExpiryProgressBar(expiryDate: expiryDate),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  '$remainingDays',
-                  style: TextStyle(
-                      color: Color(0x9B050505),
-                      fontWeight: FontWeight.bold),
+              return Card(
+                margin: EdgeInsets.all(8),
+                child: ListTile(
+                  leading: Image.network(result.url, width: 100, height: 100),
+                  title: Text(result.texts[0]),  // 제품 이름이나 라벨을 가정
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('유통기한: $expiryDate'), // 찾아낸 유통기한
+                      LinearProgressIndicator(value: progress),
+                      Text('${daysRemaining.abs()}일 남음'),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              );
+            },
           );
         },
-      )
-          : Center(child: CircularProgressIndicator()),
+      ),
     );
+  }
+
+  String findExpiryDate(List<String> texts) {
+    final RegExp datePattern = RegExp(r'\b(\d{2})?/?(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01])\b');
+    final currentYear = DateTime.now().year; // 현재 년도
+
+    for (String text in texts) {
+      final matches = datePattern.firstMatch(text);
+      if (matches != null) {
+        String year = matches.group(1) ?? currentYear.toString().substring(2); // 년도가 없다면 현재 년도의 마지막 두 자리
+        String month = matches.group(2)!;
+        String day = matches.group(3)!;
+        return '$year/$month/$day';  // 완전한 "YY/MM/DD" 형식으로 반환
+      }
+    }
+    return "날짜 없음";  // 매칭되는 날짜가 없을 경우
+  }
+
+  int _calculateRemainingDays(String expiryDate) {
+    final dateFormat = DateFormat('yy/MM/dd'); // 올바른 년도 표현을 위해 'yy' 사용
+    try {
+      DateTime endDate = dateFormat.parseStrict(expiryDate); // parseStrict를 사용하여 정확한 날짜만 허용
+      final now = DateTime.now();
+      final currentDate = DateTime(now.year, now.month, now.day); // 시간을 제외한 현재 날짜
+      return endDate.difference(currentDate).inDays;
+    } catch (e) {
+      // 포맷 예외 발생 시 로그 출력 및 기본값 반환
+      print('날짜 포맷 오류: $e');
+      return 0; // 유효하지 않은 날짜 포맷인 경우 0일 남음을 반환
+    }
+  }
+
+
+
+  double _calculateProgress(int daysDifference) {
+    return (daysDifference > 0 ? daysDifference / 365 : 0.0).clamp(0.0, 1.0);
   }
 }

@@ -1,6 +1,7 @@
 {
   "project_info": {
     "project_number": "815209381949",
+    "firebase_url": "https://rasptoapp-default-rtdb.asia-southeast1.firebasedatabase.app",
     "project_id": "rasptoapp",
     "storage_bucket": "rasptoapp.appspot.com"
   },
@@ -39,10 +40,10 @@
               "client_type": 3
             },
             {
-              "client_id": "815209381949-sjdag6861gakn084uil09nise3a67dab.apps.googleusercontent.com",
+              "client_id": "815209381949-l13d6chl18vj8l09vk86t2i7r07tbpkq.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.test1"
+                "bundle_id": "com.example.untitled1"
               }
             }
           ]
@@ -57,6 +58,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "815209381949-f0fed34n8g78ke5hsu3m3acqd14budfg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.untitled1",
+            "certificate_hash": "d4d2a8a919de567dff346f463783e8fb8924c64b"
+          }
+        },
         {
           "client_id": "815209381949-nlnq77a4t3j09ad9lj04u4m64is8us38.apps.googleusercontent.com",
           "client_type": 3
@@ -75,10 +84,10 @@
               "client_type": 3
             },
             {
-              "client_id": "815209381949-sjdag6861gakn084uil09nise3a67dab.apps.googleusercontent.com",
+              "client_id": "815209381949-l13d6chl18vj8l09vk86t2i7r07tbpkq.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.test1"
+                "bundle_id": "com.example.untitled1"
               }
             }
           ]
