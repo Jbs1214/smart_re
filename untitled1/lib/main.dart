@@ -115,16 +115,20 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
               final expiryDate = findExpiryDate(result.texts);
               final daysRemaining = _calculateRemainingDays(expiryDate);
               final progress = _calculateProgress(daysRemaining);
+              final firstTextConfidence = result.confidences.isNotEmpty ? result.confidences[0] : 0.0;
+              // Update confidence message display logic
+              final productName = result.texts.isNotEmpty ? result.texts[0] : '텍스트 없음';
+              final confidenceMessage = firstTextConfidence < 0.8 ? '(부정확한 이름일 수 있습니다)' : '';
 
               return Card(
                 margin: EdgeInsets.all(8),
                 child: ListTile(
                   leading: Image.network(result.url, width: 100, height: 100),
-                  title: Text(result.texts[0]),  // 제품 이름이나 라벨을 가정
+                  title: Text('$productName $confidenceMessage'), // Concatenate the message with the product name
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('유통기한: $expiryDate'), // 찾아낸 유통기한
+                      Text('유통기한: $expiryDate'),
                       LinearProgressIndicator(value: progress),
                       Text('${daysRemaining.abs()}일 남음'),
                     ],

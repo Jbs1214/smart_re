@@ -2,20 +2,26 @@ import 'package:firebase_database/firebase_database.dart';
 
 class OCRResult {
   final String url;
-  final List<String> texts;  // 텍스트 배열로 변경
+  final List<String> texts;
+  final List<double> confidences;  // Updated to store a list of confidences
 
-  OCRResult({required this.url, required this.texts});
+  OCRResult({required this.url, required this.texts, required this.confidences});
 
   factory OCRResult.fromJson(Map<dynamic, dynamic> json) {
     final url = json['image_url'] as String? ?? '기본 이미지 URL';
-    final textsList = json['texts'] as List<dynamic>? ?? [];  // 배열로 처리
-    List<String> texts = textsList.map((text) => text.toString()).toList(); // 배열의 각 요소를 문자열로 변환
+    final textsList = json['texts'] as List<dynamic>? ?? [];
+    List<String> texts = textsList.map((text) => text.toString()).toList();
+    final confidencesList = json['confidences'] as List<dynamic>? ?? [];
+    List<double> confidences = confidencesList.map((confidence) => double.tryParse(confidence.toString()) ?? 0.0).toList();
     return OCRResult(
       url: url,
       texts: texts,
+      confidences: confidences,
     );
   }
 }
+
+
 
 
 class FirebaseService {
