@@ -1,9 +1,11 @@
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/intl.dart';
+import 'package:untitled1/screens/in_refriger_page.dart';
 import 'package:untitled1/screens/login_screen.dart';
 import 'package:untitled1/widgets/search.dart';
 import 'firebase_options.dart';
@@ -53,18 +55,23 @@ class MyApp extends StatelessWidget {
         path: '/home',
         builder: (BuildContext context, GoRouterState state) => StorageDemoPage(),
       ),
+      GoRoute(
+        path: '/fridge-gallery',
+        builder: (BuildContext context, GoRouterState state) => FridgeGalleryPage(),
+      ),
     ],
     redirect: (BuildContext context, GoRouterState state) {
       if (_authIndexNotifier.value == 0 && state.uri.path != '/login') {
         return '/login';
       }
-      if (_authIndexNotifier.value == 1 && state.uri.path != '/home') {
+      if (_authIndexNotifier.value == 1 && state.uri.path != '/home' && state.uri.path != '/fridge-gallery') {
         return '/home';
       }
       return null;
     },
   );
 }
+
 
 class StorageDemoPage extends StatefulWidget {
   @override
@@ -112,19 +119,21 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
             itemCount: snapshot.data!.length,
             itemBuilder: (context, index) {
               final result = snapshot.data![index];
-              final expiryDate = findExpiryDate(result.texts);
-              final daysRemaining = _calculateRemainingDays(expiryDate);
+              final productDetails = extractProductDetails(result.texts);
+              final expiryDate = productDetails['expiryDate'];
+              final daysRemaining = _calculateRemainingDays(expiryDate!);
               final progress = _calculateProgress(daysRemaining);
-              final firstTextConfidence = result.confidences.isNotEmpty ? result.confidences[0] : 0.0;
-              // Update confidence message display logic
-              final productName = result.texts.isNotEmpty ? result.texts[0] : '텍스트 없음';
-              final confidenceMessage = firstTextConfidence < 0.8 ? '(부정확한 이름일 수 있습니다)' : '';
+              final productName = productDetails['productName'];
+
+              // Updated logic to check confidence for all related product names
+              final lowConfidence = result.confidences.any((c) => c < 0.8);
+              final confidenceMessage = lowConfidence ? ' (정확도가 낮을 수 있습니다)' : '';
 
               return Card(
                 margin: EdgeInsets.all(8),
                 child: ListTile(
                   leading: Image.network(result.url, width: 100, height: 100),
-                  title: Text('$productName $confidenceMessage'), // Concatenate the message with the product name
+                  title: Text('$productName$confidenceMessage'),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -139,40 +148,64 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
           );
         },
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          // Firebase Realtime Database에서 카메라 트리거 값 설정
+          DatabaseReference ref = FirebaseDatabase.instance.ref('camera-control/trigger');
+          await ref.set(true);
+        },
+        child: Icon(Icons.camera_alt),
+      ),
     );
   }
 
-  String findExpiryDate(List<String> texts) {
+
+  Map<String, String> extractProductDetails(List<String> texts) {
     final RegExp datePattern = RegExp(r'\b(\d{2})?/?(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01])\b');
-    final currentYear = DateTime.now().year; // 현재 년도
+    String productName = '';
+    String expiryDate = "날짜 없음";
+    bool capturingName = true;
 
     for (String text in texts) {
-      final matches = datePattern.firstMatch(text);
-      if (matches != null) {
-        String year = matches.group(1) ?? currentYear.toString().substring(2); // 년도가 없다면 현재 년도의 마지막 두 자리
-        String month = matches.group(2)!;
-        String day = matches.group(3)!;
-        return '$year/$month/$day';  // 완전한 "YY/MM/DD" 형식으로 반환
+      if (datePattern.hasMatch(text) && capturingName) {
+        productName += text.split(datePattern).first.trim();
+        capturingName = false;
+        expiryDate = findExpiryDate(text);
+      } else if (capturingName) {
+        productName += text + ' ';
       }
     }
-    return "날짜 없음";  // 매칭되는 날짜가 없을 경우
+
+    return {
+      'productName': productName.trim(),
+      'expiryDate': expiryDate
+    };
+  }
+
+  String findExpiryDate(String text) {
+    final RegExp datePattern = RegExp(r'\b(\d{2})?/?(0[1-9]|1[0-2])/(0[1-9]|[12][0-9]|3[01])\b');
+    final matches = datePattern.firstMatch(text);
+    if (matches != null) {
+      String year = matches.group(1) ?? DateTime.now().year.toString().substring(2);
+      String month = matches.group(2)!;
+      String day = matches.group(3)!;
+      return '$year/$month/$day';
+    }
+    return "날짜 없음";
   }
 
   int _calculateRemainingDays(String expiryDate) {
-    final dateFormat = DateFormat('yy/MM/dd'); // 올바른 년도 표현을 위해 'yy' 사용
+    final dateFormat = DateFormat('yy/MM/dd');
     try {
-      DateTime endDate = dateFormat.parseStrict(expiryDate); // parseStrict를 사용하여 정확한 날짜만 허용
+      DateTime endDate = dateFormat.parseStrict(expiryDate);
       final now = DateTime.now();
-      final currentDate = DateTime(now.year, now.month, now.day); // 시간을 제외한 현재 날짜
+      final currentDate = DateTime(now.year, now.month, now.day);
       return endDate.difference(currentDate).inDays;
     } catch (e) {
-      // 포맷 예외 발생 시 로그 출력 및 기본값 반환
       print('날짜 포맷 오류: $e');
-      return 0; // 유효하지 않은 날짜 포맷인 경우 0일 남음을 반환
+      return 0;
     }
   }
-
-
 
   double _calculateProgress(int daysDifference) {
     return (daysDifference > 0 ? daysDifference / 365 : 0.0).clamp(0.0, 1.0);
