@@ -11,7 +11,7 @@ class RecentPhotoPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('최근 촬영된 사진'),
+        title: Text('냉장고 내부'),
       ),
       body: FutureBuilder<String>(
         future: firebaseService.getLatestImageURLAfter(timestamp),

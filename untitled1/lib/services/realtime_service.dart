@@ -51,6 +51,18 @@ class FirebaseService {
     });
   }
 
+  Future<List<OCRResult>> getOCRResultsOnce() async {
+    final snapshot = await _database.child('ocr_results').get();
+    final List<OCRResult> results = [];
+    if (snapshot.value != null) {
+      final data = snapshot.value as Map<dynamic, dynamic>;
+      data.forEach((key, value) {
+        results.add(OCRResult.fromMap(key, value));
+      });
+    }
+    return results;
+  }
+
   Stream<OCRResult> getLatestOCRResult() {
     return _database.child('ocr_results')
         .orderByChild('timestamp')
