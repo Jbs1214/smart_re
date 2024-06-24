@@ -109,4 +109,39 @@ class FirebaseService {
       'modifiedExpiryDate': modifiedExpiryDate,
     });
   }
+
+  Future<List<OCRResult>> getExpiringProducts() async {
+    final List<OCRResult> allResults = await getOCRResultsOnce();
+    final DateTime now = DateTime.now();
+    final List<OCRResult> expiringProducts = allResults.where((product) {
+      final daysRemaining = calculateRemainingDays(product.modifiedExpiryDate);
+      return daysRemaining <= 7;
+    }).toList();
+    return expiringProducts;
+  }
+
+  int calculateRemainingDays(String expiryDate) {
+    try {
+      DateTime endDate;
+      if (expiryDate.contains('/')) {
+        final parts = expiryDate.split('/');
+        if (parts.length == 3) {
+          endDate = DateFormat('yyyy/MM/dd').parseStrict(expiryDate);
+        } else if (parts.length == 2) {
+          final formattedExpiryDate = '${DateTime.now().year}/${parts[0].padLeft(2, '0')}/${parts[1].padLeft(2, '0')}';
+          endDate = DateFormat('yyyy/MM/dd').parseStrict(formattedExpiryDate);
+        } else {
+          return 0; // 형식이 맞지 않는 경우 0을 반환
+        }
+      } else {
+        endDate = DateFormat('yyyy/MM/dd').parseStrict(expiryDate);
+      }
+
+      final currentDate = DateTime.now();
+      return endDate.difference(currentDate).inDays;
+    } catch (e) {
+      print('날짜 포맷 오류: $e');
+      return 0; // 예외 발생 시 0을 반환
+    }
+  }
 }

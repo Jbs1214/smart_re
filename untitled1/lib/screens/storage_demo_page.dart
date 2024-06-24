@@ -9,6 +9,7 @@ import '../services/realtime_service.dart';
 import '../widgets/search.dart';
 import 'login_screen.dart';
 import 'recent_photo_page.dart'; // RecentPhotoPage 포함
+import 'dart:math' as math;
 
 class StorageDemoPage extends StatefulWidget {
   @override
@@ -69,6 +70,7 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
               final productName = result.productName.isNotEmpty
                   ? result.productName
                   : (productDetails['productName'] ?? "이름 없음");
+              final progressColor = _getProgressColor(daysRemaining);
 
               // Updated logic to check confidence for all related product names
               final lowConfidence = result.confidences.any((c) => c < 0.8);
@@ -84,8 +86,10 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('유통기한: $expiryDate'),
-                      LinearProgressIndicator(value: progress),
-                      Text('${daysRemaining.abs()}일 남음'),
+                      LinearProgressIndicator(value: progress,
+                        valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                        backgroundColor: Colors.grey[300],),
+                      Text(daysRemaining < 0 ? '${daysRemaining.abs()}일 지났습니다' : '${daysRemaining.abs()}일 남음'),
                     ],
                   ),
                   onTap: () => _editProductDialog(
@@ -114,6 +118,18 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
         child: Icon(Icons.camera_alt),
       ),
     );
+  }
+
+  Color _getProgressColor(int daysRemaining) {
+    if (daysRemaining < 0) {
+      return Colors.red; // 유통기한이 지난 경우
+    } else if (daysRemaining <= 7) {
+      return Colors.redAccent[100]!; // 유통기한이 7일 이하로 남은 경우
+    } else {
+      // 남은 기간에 따라 색상이 점점 붉어짐
+      double colorIntensity = math.max(0.0, 1.0 - daysRemaining / 30.0);
+      return Color.lerp(Colors.green, Colors.red, colorIntensity)!;
+    }
   }
 
   Map<String, String?> extractProductDetails(List<String> texts) {
@@ -183,9 +199,15 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
     }
   }
 
-  double _calculateProgress(int daysDifference) {
-    return (daysDifference > 0 ? daysDifference / 365 : 0.0).clamp(0.0, 1.0);
+  double _calculateProgress(int daysRemaining) {
+    if (daysRemaining < 0) {
+      // 유통기한이 지난 경우
+      return 1.0;
+    }
+    int maxDays = 365; // 유통기한 계산을 위한 최대 일수 예시
+    return 1.0 - (daysRemaining / maxDays).clamp(0.0, 1.0);
   }
+
 
   void _editProductDialog(BuildContext context, OCRResult result, String productName, String expiryDate) {
     final TextEditingController nameController = TextEditingController(text: productName);
