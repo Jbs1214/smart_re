@@ -59,19 +59,22 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
         stream: firebaseService.getOCRResults(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return CircularProgressIndicator();
+            return Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Text('오류 발생: ${snapshot.error}');
+            return Center(child: Text('오류 발생: ${snapshot.error}'));
           }
           if (!snapshot.hasData || snapshot.data == null || snapshot.data!.isEmpty) {
-            return Text('표시할 아이템이 없습니다.');
+            return Center(child: Text('표시할 아이템이 없습니다.'));
           }
 
           // 유통기한이 얼마 남지 않은 순으로 정렬
           List<OCRResult> sortedResults = List.from(snapshot.data!);
-          sortedResults.sort((a, b) => _calculateRemainingDays(a.modifiedExpiryDate)
-              .compareTo(_calculateRemainingDays(b.modifiedExpiryDate)));
+          sortedResults.sort((a, b) {
+            int daysA = _calculateRemainingDays(a.modifiedExpiryDate.isNotEmpty ? a.modifiedExpiryDate : extractProductDetails(a.texts)['expiryDate'] ?? "날짜 없음");
+            int daysB = _calculateRemainingDays(b.modifiedExpiryDate.isNotEmpty ? b.modifiedExpiryDate : extractProductDetails(b.texts)['expiryDate'] ?? "날짜 없음");
+            return daysA.compareTo(daysB);
+          });
 
           return ListView.builder(
             itemCount: sortedResults.length,
@@ -81,12 +84,8 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
               final expiryDate = result.modifiedExpiryDate.isNotEmpty
                   ? result.modifiedExpiryDate
                   : (productDetails['expiryDate'] ?? "날짜 없음");
-              final daysRemaining = expiryDate != "날짜 없음"
-                  ? _calculateRemainingDays(expiryDate)
-                  : 0;
-              final progress = expiryDate != "날짜 없음"
-                  ? _calculateProgress(daysRemaining)
-                  : 0.0;
+              final daysRemaining = _calculateRemainingDays(expiryDate);
+              final progress = _calculateProgress(daysRemaining);
               final productName = result.productName.isNotEmpty
                   ? result.productName
                   : (productDetails['productName'] ?? "이름 없음");
@@ -127,11 +126,10 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
           DatabaseReference ref = FirebaseDatabase.instance.ref('camera-control/trigger');
           String timestamp = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
           await ref.set({"trigger": true, "timestamp": timestamp});
-          print('Camera trigger set to true at $timestamp'); // 디버그 출력 추가
+          print('Camera trigger set to true at $timestamp');
 
-          // Navigate to RecentPhotoPage
           if (mounted) {
-            print('Navigating to RecentPhotoPage'); // 라우팅 로그 추가
+            print('Navigating to RecentPhotoPage');
             Navigator.of(context).push(
               MaterialPageRoute(builder: (context) => RecentPhotoPage(timestamp: timestamp)),
             );
