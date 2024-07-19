@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,7 +7,7 @@ import 'package:intl/intl.dart';
 import '../services/realtime_service.dart';
 import '../widgets/search.dart';
 import 'login_screen.dart';
-import 'recent_photo_page.dart'; // RecentPhotoPage 포함
+import 'recent_photo_page.dart';
 import 'dart:math' as math;
 
 class StorageDemoPage extends StatefulWidget {
@@ -18,6 +17,21 @@ class StorageDemoPage extends StatefulWidget {
 
 class _StorageDemoPageState extends State<StorageDemoPage> {
   final FirebaseService firebaseService = FirebaseService();
+  List<OCRResult> ocrResults = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOCRResults();
+  }
+
+  void _loadOCRResults() async {
+    firebaseService.getOCRResults().listen((results) {
+      setState(() {
+        ocrResults = results;
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +41,7 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
         actions: <Widget>[
           IconButton(
             icon: Icon(Icons.search),
-            onPressed: () => showSearch(context: context, delegate: DataSearch([])),
+            onPressed: () => showSearch(context: context, delegate: DataSearch(_formatDataForSearch())),
           ),
           IconButton(
             icon: Icon(Icons.exit_to_app),
@@ -53,10 +67,16 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
           if (!snapshot.hasData || snapshot.data == null || snapshot.data!.isEmpty) {
             return Text('표시할 아이템이 없습니다.');
           }
+
+          // 유통기한이 얼마 남지 않은 순으로 정렬
+          List<OCRResult> sortedResults = List.from(snapshot.data!);
+          sortedResults.sort((a, b) => _calculateRemainingDays(a.modifiedExpiryDate)
+              .compareTo(_calculateRemainingDays(b.modifiedExpiryDate)));
+
           return ListView.builder(
-            itemCount: snapshot.data!.length,
+            itemCount: sortedResults.length,
             itemBuilder: (context, index) {
-              final result = snapshot.data![index];
+              final result = sortedResults[index];
               final productDetails = extractProductDetails(result.texts);
               final expiryDate = result.modifiedExpiryDate.isNotEmpty
                   ? result.modifiedExpiryDate
@@ -86,9 +106,11 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('유통기한: $expiryDate'),
-                      LinearProgressIndicator(value: progress,
+                      LinearProgressIndicator(
+                        value: progress,
                         valueColor: AlwaysStoppedAnimation<Color>(progressColor),
-                        backgroundColor: Colors.grey[300],),
+                        backgroundColor: Colors.grey[300],
+                      ),
                       Text(daysRemaining < 0 ? '${daysRemaining.abs()}일 지났습니다' : '${daysRemaining.abs()}일 남음'),
                     ],
                   ),
@@ -123,7 +145,7 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
   Color _getProgressColor(int daysRemaining) {
     if (daysRemaining < 0) {
       return Colors.red; // 유통기한이 지난 경우
-    } else if (daysRemaining <= 7) {
+    } else if (daysRemaining <= 14) {
       return Colors.redAccent[100]!; // 유통기한이 7일 이하로 남은 경우
     } else {
       // 남은 기간에 따라 색상이 점점 붉어짐
@@ -136,7 +158,7 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
     final RegExp datePattern =
     RegExp(r'\b(0?[1-9]|1[0-2])/(0?[1-9]|[12][0-9]|3[01])\b');
     final RegExp datePattern2 =
-    RegExp(r'\b(0?[1-9]|[12][0-9]|3[01])/(0?[1-9]|1[0-2])/(0?[0-9]|[0-9]{2})\b');
+    RegExp(r'\b(0?[1-9]|[12][0-9]|3[01])/(0?[1-9]|1[0-2])/(0?[0-9]{2}|[0-9]{4})\b');
     String productName = '';
     String? expiryDate;
     bool capturingName = true;
@@ -163,13 +185,22 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
     final RegExp datePattern =
     RegExp(r'\b(0?[1-9]|1[0-2])/(0?[1-9]|[12][0-9]|3[01])\b');
     final RegExp datePattern2 =
-    RegExp(r'\b(0?[1-9]|[12][0-9]|3[01])/(0?[1-9]|1[0-2])/(0?[0-9]|[0-9]{2})\b');
+    RegExp(r'\b(0?[1-9]|[12][0-9]|3[01])/(0?[1-9]|1[0-2])/(0?[0-9]{2}|[0-9]{4})\b');
     final matches = reverse ? datePattern2.firstMatch(text) : datePattern.firstMatch(text);
     if (matches != null) {
-      String year = DateTime.now().year.toString().substring(2); // Default to current year
-      String month = reverse ? matches.group(2)!.padLeft(2, '0') : matches.group(1)!.padLeft(2, '0');
-      String day = reverse ? matches.group(1)!.padLeft(2, '0') : matches.group(2)!.padLeft(2, '0');
-      return '$year/$month/$day';
+      if (reverse) {
+        String year = matches.group(3)!.length == 2
+            ? '20' + matches.group(3)!
+            : matches.group(3)!;
+        String month = matches.group(2)!.padLeft(2, '0');
+        String day = matches.group(1)!.padLeft(2, '0');
+        return '$year/$month/$day';
+      } else {
+        String year = DateTime.now().year.toString().substring(2); // Default to current year
+        String month = matches.group(1)!.padLeft(2, '0');
+        String day = matches.group(2)!.padLeft(2, '0');
+        return '$year/$month/$day';
+      }
     }
     return "날짜 없음";
   }
@@ -183,11 +214,17 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
           final formattedExpiryDate =
               '${DateTime.now().year}/${parts[0].padLeft(2, '0')}/${parts[1].padLeft(2, '0')}';
           endDate = DateFormat('yyyy/MM/dd').parseStrict(formattedExpiryDate);
+        } else if (parts.length == 3) {
+          if (parts[0].length == 2) { // yy/MM/dd 형식일 경우
+            endDate = DateFormat('yy/MM/dd').parseStrict(expiryDate);
+          } else { // yyyy/MM/dd 형식일 경우
+            endDate = DateFormat('yyyy/MM/dd').parseStrict(expiryDate);
+          }
         } else {
-          endDate = DateFormat('yy/MM/dd').parseStrict(expiryDate);
+          throw FormatException("Invalid date format");
         }
       } else {
-        endDate = DateFormat('yy/MM/dd').parseStrict(expiryDate);
+        throw FormatException("Date does not contain expected delimiter");
       }
 
       final now = DateTime.now();
@@ -207,7 +244,6 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
     int maxDays = 365; // 유통기한 계산을 위한 최대 일수 예시
     return 1.0 - (daysRemaining / maxDays).clamp(0.0, 1.0);
   }
-
 
   void _editProductDialog(BuildContext context, OCRResult result, String productName, String expiryDate) {
     final TextEditingController nameController = TextEditingController(text: productName);
@@ -263,5 +299,16 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
         );
       },
     );
+  }
+
+  List<List<dynamic>> _formatDataForSearch() {
+    return ocrResults.map((result) {
+      final productDetails = extractProductDetails(result.texts);
+      return [
+        result.productName.isNotEmpty ? result.productName : (productDetails['productName'] ?? "이름 없음"),
+        result.modifiedExpiryDate.isNotEmpty ? result.modifiedExpiryDate : (productDetails['expiryDate'] ?? "날짜 없음"),
+        result.url // 이미지 URL 추가
+      ];
+    }).toList();
   }
 }

@@ -77,7 +77,7 @@ class FirebaseService {
   }
 
   Future<String> getLatestImageURL() async {
-    final ListResult result = await _storage.ref('captures/').listAll();
+    final ListResult result = await _storage.ref('full_capture/').listAll();
     if (result.items.isNotEmpty) {
       final Reference latestImageRef = result.items.last;
       final String url = await latestImageRef.getDownloadURL();
@@ -87,7 +87,7 @@ class FirebaseService {
   }
 
   Future<String> getLatestImageURLAfter(String timestamp) async {
-    final ListResult result = await _storage.ref('captures/').listAll();
+    final ListResult result = await _storage.ref('full_capture/').listAll();
     if (result.items.isNotEmpty) {
       for (var item in result.items.reversed) {
         final FullMetadata metadata = await item.getMetadata();

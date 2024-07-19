@@ -1,93 +1,72 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
 import 'package:intl/intl.dart';
-import 'package:untitled1/widgets/progress_bar.dart';
 
+class DataSearch extends SearchDelegate<List<dynamic>> {
+  final List<List<dynamic>> data;
 
-String _calculateExpiryPeriod(String expiryDate) {
-  final dateFormat = DateFormat('yyyy.MM.dd');
-  DateTime endDate;
-  try {
-    endDate = dateFormat.parse(expiryDate);
-  } on FormatException {
-    return '(yyyy.MM.dd) 형태로 입력해주세요.';
-  }
-
-  final now = DateTime.now();
-  final remainingDays = endDate.difference(now).inDays;
-
-  if (remainingDays < 0) {
-    return '유통기한이 지났습니다.(${-remainingDays}일 지남)';
-  } else if (remainingDays == 0) {
-    return 'D-Day';
-  } else {
-    return 'D-${-remainingDays}일';
-  }
-}
-
-
-class DataSearch extends SearchDelegate<String> {
-  final List<List<dynamic>> allData;
-
-  DataSearch(this.allData);
+  DataSearch(this.data);
 
   @override
   List<Widget> buildActions(BuildContext context) {
     return [
-      if (query.isNotEmpty)
-        IconButton(
-          icon: Icon(Icons.clear),
-          onPressed: () {
-            query = '';
-            showSuggestions(context);
-          },
-        ),
+      IconButton(
+        icon: Icon(Icons.clear),
+        onPressed: () {
+          query = "";
+        },
+      ),
     ];
   }
 
   @override
   Widget buildLeading(BuildContext context) {
     return IconButton(
-      icon: Icon(Icons.arrow_back),
+      icon: AnimatedIcon(
+        icon: AnimatedIcons.menu_arrow,
+        progress: transitionAnimation,
+      ),
       onPressed: () {
-        close(context, "");
+        close(context, []);
       },
     );
   }
 
   @override
   Widget buildResults(BuildContext context) {
-    final List<List<dynamic>> results = allData
-        .where((list) => list.isNotEmpty && list.length > 1)
-        .where((item) => item[0].toString().toLowerCase().contains(query.toLowerCase()))
-        .toList();
+    final results = data.where((entry) {
+      return entry.any((element) => element.toString().toLowerCase().contains(query.toLowerCase()));
+    }).toList();
 
     return ListView.builder(
       itemCount: results.length,
       itemBuilder: (context, index) {
+        final result = results[index];
+        final productName = result[0];
+        final expiryDate = result[1];
+        final imageUrl = result[2];
+        final daysRemaining = _calculateRemainingDays(expiryDate);
+        final progressColor = _getProgressColor(daysRemaining);
 
-        final item = results[index];
-        final String foodName = item[0];
-        final String expiryDate = item[1];
-        final String remainingDays = _calculateExpiryPeriod(expiryDate);
-
-        return Column(
-          children: <Widget>[
-            ListTile(
-              title: Text(foodName,
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold)),
+        return Card(
+          margin: EdgeInsets.all(8),
+          child: ListTile(
+            leading: Image.network(imageUrl, width: 100, height: 100),
+            title: Text(productName),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('유통기한: $expiryDate'),
+                LinearProgressIndicator(
+                  value: _calculateProgress(daysRemaining),
+                  valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                  backgroundColor: Colors.grey[300],
+                ),
+                Text(daysRemaining < 0 ? '${daysRemaining.abs()}일 지났습니다' : '${daysRemaining.abs()}일 남음'),
+              ],
             ),
-            ExpiryProgressBar(expiryDate: expiryDate),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                '$remainingDays',
-                style: TextStyle(
-                    color: Color(0x9B050505),
-                    fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+          ),
         );
       },
     );
@@ -95,21 +74,91 @@ class DataSearch extends SearchDelegate<String> {
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    final List<List<dynamic>> suggestions = query.isEmpty
-        ? []
-        : allData
-        .where((list) => list.isNotEmpty)
-        .where((item) => item[0].toString().toLowerCase().contains(query.toLowerCase()))
-        .toList();
+    final suggestions = data.where((entry) {
+      return entry.any((element) => element.toString().toLowerCase().contains(query.toLowerCase()));
+    }).toList();
 
     return ListView.builder(
       itemCount: suggestions.length,
       itemBuilder: (context, index) {
+        final suggestion = suggestions[index];
+        final productName = suggestion[0];
+        final expiryDate = suggestion[1];
+        final imageUrl = suggestion[2];
+        final daysRemaining = _calculateRemainingDays(expiryDate);
+        final progressColor = _getProgressColor(daysRemaining);
+
         return ListTile(
-          title: Text(suggestions[index][0]),
-          // 다른 필드가 있다면 여기에 추가
+          leading: Image.network(imageUrl, width: 100, height: 100),
+          title: Text(productName),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('유통기한: $expiryDate'),
+              LinearProgressIndicator(
+                value: _calculateProgress(daysRemaining),
+                valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                backgroundColor: Colors.grey[300],
+              ),
+              Text(daysRemaining < 0 ? '${daysRemaining.abs()}일 지났습니다' : '${daysRemaining.abs()}일 남음'),
+            ],
+          ),
+          onTap: () {
+            query = productName;
+            showResults(context);
+          },
         );
       },
     );
+  }
+
+  int _calculateRemainingDays(String expiryDate) {
+    try {
+      DateTime endDate;
+      if (expiryDate.contains('/')) {
+        final parts = expiryDate.split('/');
+        if (parts.length == 2) {
+          final formattedExpiryDate =
+              '${DateTime.now().year}/${parts[0].padLeft(2, '0')}/${parts[1].padLeft(2, '0')}';
+          endDate = DateFormat('yyyy/MM/dd').parseStrict(formattedExpiryDate);
+        } else if (parts.length == 3) {
+          if (parts[0].length == 2) { // yy/MM/dd 형식일 경우
+            endDate = DateFormat('yy/MM/dd').parseStrict(expiryDate);
+          } else { // yyyy/MM/dd 형식일 경우
+            endDate = DateFormat('yyyy/MM/dd').parseStrict(expiryDate);
+          }
+        } else {
+          throw FormatException("Invalid date format");
+        }
+      } else {
+        throw FormatException("Date does not contain expected delimiter");
+      }
+
+      final now = DateTime.now();
+      final currentDate = DateTime(now.year, now.month, now.day);
+      return endDate.difference(currentDate).inDays;
+    } catch (e) {
+      print('날짜 포맷 오류: $e');
+      return 0;
+    }
+  }
+
+  double _calculateProgress(int daysRemaining) {
+    if (daysRemaining < 0) {
+      return 1.0;
+    }
+    int maxDays = 365;
+    return 1.0 - (daysRemaining / maxDays).clamp(0.0, 1.0);
+  }
+
+  Color _getProgressColor(int daysRemaining) {
+    if (daysRemaining < 0) {
+      return Colors.red;
+    } else if (daysRemaining <= 14) {
+      return Colors.redAccent[100]!;
+    } else {
+      double colorIntensity = math.max(0.0, 1.0 - daysRemaining / 30.0);
+      return Color.lerp(Colors.green, Colors.red, colorIntensity)!;
+    }
   }
 }
