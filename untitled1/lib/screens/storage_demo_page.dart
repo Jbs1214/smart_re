@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/intl.dart';
 import '../services/realtime_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/search.dart';
 import 'login_screen.dart';
 import 'recent_photo_page.dart';
@@ -17,12 +18,14 @@ class StorageDemoPage extends StatefulWidget {
 
 class _StorageDemoPageState extends State<StorageDemoPage> {
   final FirebaseService firebaseService = FirebaseService();
+  final NotificationService notificationService = NotificationService();
   List<OCRResult> ocrResults = [];
 
   @override
   void initState() {
     super.initState();
     _loadOCRResults();
+    _scheduleDailyNotification(); // 추가된 부분
   }
 
   void _loadOCRResults() async {
@@ -30,7 +33,21 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
       setState(() {
         ocrResults = results;
       });
+      _scheduleDailyNotification(); // 유통기한 정보를 업데이트한 후 알림을 설정
     });
+  }
+
+  void _scheduleDailyNotification() async {
+    await notificationService.init();
+    final expiringSoonCount = ocrResults.where((result) {
+      final daysRemaining = _calculateRemainingDays(result.modifiedExpiryDate.isNotEmpty
+          ? result.modifiedExpiryDate
+          : extractProductDetails(result.texts)['expiryDate'] ?? "날짜 없음");
+      return daysRemaining <= 7;
+    }).length;
+    if (expiringSoonCount > 0) {
+      await notificationService.scheduleNotification(20, 30, expiringSoonCount);
+    }
   }
 
   @override
@@ -143,7 +160,7 @@ class _StorageDemoPageState extends State<StorageDemoPage> {
   Color _getProgressColor(int daysRemaining) {
     if (daysRemaining < 0) {
       return Colors.red; // 유통기한이 지난 경우
-    } else if (daysRemaining <= 14) {
+    } else if (daysRemaining <= 7) {
       return Colors.redAccent[100]!; // 유통기한이 7일 이하로 남은 경우
     } else {
       // 남은 기간에 따라 색상이 점점 붉어짐

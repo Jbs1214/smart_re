@@ -1,17 +1,20 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:untitled1/screens/login_screen.dart';
 import 'package:untitled1/screens/storage_demo_page.dart';
+import 'package:untitled1/services/notification_service.dart';
 import 'firebase_options.dart';
-import 'services/realtime_service.dart';
-import 'widgets/search.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  final notificationService = NotificationService();
+  await notificationService.init();
+
   runApp(MyApp());
 }
 
